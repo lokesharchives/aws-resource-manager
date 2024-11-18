@@ -1,0 +1,66 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'VPC Template'
+Parameters:
+  CidrBlock:
+    Description: 'CIDR block of the VPC'
+    Type: String
+    AllowedPattern: '^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$'
+Resources:
+  Vpc:
+    Type: 'AWS::EC2::VPC'
+    Properties:
+      CidrBlock: !Ref CidrBlock
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      InstanceTenancy: default
+      Tags:
+      - Key: Name
+        Value: !Ref CidrBlock
+  VpcCidrBlock:
+    Type: 'AWS::EC2::VPCCidrBlock'
+    Properties:
+      AmazonProvidedIpv6CidrBlock: true
+      VpcId: !Ref Vpc
+  InternetGateway:
+    Type: 'AWS::EC2::InternetGateway'
+    Properties:
+      Tags:
+      - Key: Name
+        Value: !Ref CidrBlock
+  EgressOnlyInternetGateway:
+    Type: 'AWS::EC2::EgressOnlyInternetGateway'
+    Properties:
+      VpcId: !Ref Vpc
+  VpcGatewayAttachment:
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Properties:
+      VpcId: !Ref Vpc
+      InternetGatewayId: !Ref InternetGateway
+Outputs:
+  ModuleId:
+    Value: 'vpc-plain'
+  ModuleVersion:
+    Value: '2.0.1'
+  StackName:
+    Value: !Ref 'AWS::StackName'
+  Id:
+    Value: !Ref Vpc
+    Export:
+      Name: !Sub '${AWS::StackName}-Id'
+  CidrBlock:
+    Value: !Ref CidrBlock
+    Export:
+      Name: !Sub '${AWS::StackName}-CidrBlock'
+  CidrBlockIPv6:
+    Value: !Select [0, !GetAtt 'Vpc.Ipv6CidrBlocks']
+    Export:
+      Name: !Sub '${AWS::StackName}-CidrBlockIPv6'
+  InternetGatewayId:
+    Value: !Ref InternetGateway
+    Export:
+      Name: !Sub '${AWS::StackName}-InternetGatewayId'
+  EgressOnlyInternetGatewayId:
+    Value: !Ref EgressOnlyInternetGateway
+    Export:
+      Name: !Sub '${AWS::StackName}-EgressOnlyInternetGatewayId'
