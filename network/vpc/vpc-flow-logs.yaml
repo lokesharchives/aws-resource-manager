@@ -1,0 +1,64 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'VPC Flow Log Template'
+Parameters:
+  VpcPlainModule:
+    Description: 'Stack name of vpc-plain module'
+    Type: String
+  TrafficType:
+    Type: String
+    AllowedValues:
+    - ACCEPT
+    - REJECT
+    - ALL
+  RetentionInDays:
+    Description: 'Specifies the number of days you want to retain log events'
+    Type: Number
+    AllowedValues: [1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1827, 3653]
+Resources:
+  Role:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: 'vpc-flow-logs.amazonaws.com'
+          Action: 'sts:AssumeRole'
+      Policies:
+      - PolicyName: 'flow-log'
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - 'logs:CreateLogStream'
+            - 'logs:PutLogEvents'
+            - 'logs:DescribeLogGroups'
+            - 'logs:DescribeLogStreams'
+            Resource: !GetAtt 'LogGroup.Arn'
+  LogGroup:
+    Type: 'AWS::Logs::LogGroup'
+    Properties:
+      RetentionInDays: !Ref RetentionInDays
+  FlowLog:
+    Type: 'AWS::EC2::FlowLog'
+    Properties:
+      DeliverLogsPermissionArn: !GetAtt 'Role.Arn'
+      LogGroupName: !Ref LogGroup
+      ResourceId:
+        'Fn::ImportValue': !Sub '${VpcPlainModule}-Id'
+      ResourceType: 'VPC'
+      TrafficType: !Ref TrafficType
+Outputs:
+  ModuleId:
+    Value: 'vpc-flow-log'
+  ModuleVersion:
+    Value: '2.0.0'
+  StackName:
+    Value: !Ref 'AWS::StackName'
+  Arn:
+    Value: !GetAtt 'LogGroup.Arn'
+  Name:
+    Value: !Ref LogGroup
