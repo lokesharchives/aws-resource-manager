@@ -206,7 +206,7 @@ Outputs:
   ModuleId:
     Value: 'vpc-nat-gateway'
   ModuleVersion:
-    Value: '2.0.0'
+    Value: '0.0.1'
   StackName:
     Value: !Ref 'AWS::StackName'
   PublicIpAddress:
