@@ -1,7 +1,7 @@
 # aws-resource-manager
 CloudFormation Templates - GenAI
 
-# The Repo is still under development.
+# The Repo is under development.
 The primary objective of this project is to modularize the cloudformation template and reusing them across the project. Once we achieve the modularization we will integrate genAI to manage the deployment and monitoring of the resources.
 
 Currently we are working on modularizing the templates.
