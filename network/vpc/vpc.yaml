@@ -1,0 +1,311 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'AWS VPC - This template will help create a vpc in a region'
+
+Parameters:
+  AlertingModule:
+    Description: 'Optional but recommended stack name of alerting module.'
+    Type: String
+    Default: ''
+  ClassB:
+    Description: 'Class B of VPC (10.XXX.0.0/16)'
+    Type: Number
+    Default: 0
+    ConstraintDescription: 'Must be in the range [0-255]'
+    MinValue: 0
+    MaxValue: 255
+  NumberOfAvailabilityZones:
+    Description: 'How many availability zones should be used?'
+    Type: Number
+    Default: 3
+    MinValue: 2
+    MaxValue: 3
+  S3Endpoint:
+    Description: 'Add S3 endpoint to VPC?'
+    Type: String
+    Default: true
+    AllowedValues: [true, false]
+  DynamoDBEndpoint:
+    Description: 'Add DynamoDB endpoint to VPC?'
+    Type: String
+    Default: true
+    AllowedValues: [true, false]
+  FlowLog:
+    Description: 'Enable VPC Flow Log?'
+    Type: String
+    Default: 'reject-only'
+    AllowedValues: [true, 'reject-only', false]
+  FlowLogRetentionInDays:
+    Description: 'Specifies the number of days you want to retain flow log events'
+    Type: Number
+    Default: 14
+    AllowedValues: [1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1827, 3653]
+  NatGateways:
+    Description: 'Add Nat Gateway per private Subnet?'
+    Type: String
+    Default: true
+    AllowedValues: [true, false]
+Conditions:
+  HasAvailabilityZoneC: !Equals [!Ref NumberOfAvailabilityZones, 3]
+  HasS3Endpoint: !Equals [!Ref S3Endpoint, true]
+  HasDynamoDBEndpoint: !Equals [!Ref DynamoDBEndpoint, true]
+  HasFlowLog: !Not [!Equals [!Ref FlowLog, false]]
+  HasFlowLogRejectOnly: !Equals [!Ref FlowLog, 'reject-only']
+  HasNatGateways: !Equals [!Ref NatGateways, true]
+  HasAvailabilityZoneCAndNatGateways: !And [!Condition HasAvailabilityZoneC, !Condition HasNatGateways]
+Resources:
+  VpcPlain:
+    Type: 'AWS::CloudFormation::Stack'
+    Properties:
+      Parameters:
+        CidrBlock: !Sub '10.${ClassB}.0.0/16'
+      TemplateURL: './vpc-plain.yaml'
+  SubnetAPublic:
+    Type: 'AWS::CloudFormation::Stack'
+    Properties:
+      Parameters:
+        VpcPlainModule: !GetAtt 'VpcPlain.Outputs.StackName'
+        Reach: public
+        AZIndex: '0'
+        AZChar: A
+        SubnetIndex: '0'
+        SubnetCount: !If [HasAvailabilityZoneC, 6, 4]
+      TemplateURL: './vpc-subnet.yaml'
+  SubnetAPrivate:
+    Type: 'AWS::CloudFormation::Stack'
+    Properties:
+      Parameters:
+        VpcPlainModule: !GetAtt 'VpcPlain.Outputs.StackName'
+        Reach: private
+        AZIndex: '0'
+        AZChar: A
+        SubnetIndex: '1'
+        SubnetCount: !If [HasAvailabilityZoneC, 6, 4]
+      TemplateURL:  './vpc-subnet.yaml'
+  NatGatewayA:
+    Condition: HasNatGateways
+    Type: 'AWS::CloudFormation::Stack'
+    Properties:
+      Parameters:
+        PublicSubnetModule: !GetAtt 'SubnetAPublic.Outputs.StackName'
+        PrivateSubnetModule: !GetAtt 'SubnetAPrivate.Outputs.StackName'
+        AlertingModule: !Ref AlertingModule
+      TemplateURL: './vpc-nat-gateway.yaml'
+  SubnetBPublic:
+    Type: 'AWS::CloudFormation::Stack'
+    Properties:
+      Parameters:
+        VpcPlainModule: !GetAtt 'VpcPlain.Outputs.StackName'
+        Reach: public
+        AZIndex: '1'
+        AZChar: B
+        SubnetIndex: '2'
+        SubnetCount: !If [HasAvailabilityZoneC, 6, 4]
+      TemplateURL: './vpc-subnet.yaml'
+  SubnetBPrivate:
+    Type: 'AWS::CloudFormation::Stack'
+    Properties:
+      Parameters:
+        VpcPlainModule: !GetAtt 'VpcPlain.Outputs.StackName'
+        Reach: private
+        AZIndex: '1'
+        AZChar: B
+        SubnetIndex: '3'
+        SubnetCount: !If [HasAvailabilityZoneC, 6, 4]
+      TemplateURL: './vpc-subnet.yaml'
+  NatGatewayB:
+    Condition: HasNatGateways
+    Type: 'AWS::CloudFormation::Stack'
+    Properties:
+      Parameters:
+        PublicSubnetModule: !GetAtt 'SubnetBPublic.Outputs.StackName'
+        PrivateSubnetModule: !GetAtt 'SubnetBPrivate.Outputs.StackName'
+        AlertingModule: !Ref AlertingModule
+      TemplateURL: './vpc-nat-gateway.yaml'
+  SubnetCPublic:
+    Condition: HasAvailabilityZoneC
+    Type: 'AWS::CloudFormation::Stack'
+    Properties:
+      Parameters:
+        VpcPlainModule: !GetAtt 'VpcPlain.Outputs.StackName'
+        Reach: public
+        AZIndex: '2'
+        AZChar: C
+        SubnetIndex: '4'
+        SubnetCount: !If [HasAvailabilityZoneC, 6, 4]
+      TemplateURL: './vpc-subnet.yaml'
+  SubnetCPrivate:
+    Condition: HasAvailabilityZoneC
+    Type: 'AWS::CloudFormation::Stack'
+    Properties:
+      Parameters:
+        VpcPlainModule: !GetAtt 'VpcPlain.Outputs.StackName'
+        Reach: private
+        AZIndex: '2'
+        AZChar: C
+        SubnetIndex: '5'
+        SubnetCount: !If [HasAvailabilityZoneC, 6, 4]
+      TemplateURL: './vpc-subnet.yaml'
+  NatGatewayC:
+    Condition: HasAvailabilityZoneCAndNatGateways
+    Type: 'AWS::CloudFormation::Stack'
+    Properties:
+      Parameters:
+        PublicSubnetModule: !GetAtt 'SubnetCPublic.Outputs.StackName'
+        PrivateSubnetModule: !GetAtt 'SubnetCPrivate.Outputs.StackName'
+        AlertingModule: !Ref AlertingModule
+      TemplateURL: './vpc-nat-gateway.yaml'
+  VPCEndpointS3:
+    Condition: HasS3Endpoint
+    Type: 'AWS::EC2::VPCEndpoint'
+    Properties:
+      RouteTableIds: !If
+      - HasAvailabilityZoneC
+      - - !GetAtt 'SubnetAPrivate.Outputs.RouteTableId'
+        - !GetAtt 'SubnetBPrivate.Outputs.RouteTableId'
+        - !GetAtt 'SubnetCPrivate.Outputs.RouteTableId'
+      - - !GetAtt 'SubnetAPrivate.Outputs.RouteTableId'
+        - !GetAtt 'SubnetBPrivate.Outputs.RouteTableId'
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.s3'
+      VpcId: !GetAtt 'VpcPlain.Outputs.Id'
+  VPCEndpointDynamoDB:
+    Condition: HasDynamoDBEndpoint
+    Type: 'AWS::EC2::VPCEndpoint'
+    Properties:
+      RouteTableIds: !If
+      - HasAvailabilityZoneC
+      - - !GetAtt 'SubnetAPrivate.Outputs.RouteTableId'
+        - !GetAtt 'SubnetBPrivate.Outputs.RouteTableId'
+        - !GetAtt 'SubnetCPrivate.Outputs.RouteTableId'
+      - - !GetAtt 'SubnetAPrivate.Outputs.RouteTableId'
+        - !GetAtt 'SubnetBPrivate.Outputs.RouteTableId'
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.dynamodb'
+      VpcId: !GetAtt 'VpcPlain.Outputs.Id'
+  FlowLogModule:
+    Condition: HasFlowLog
+    Type: 'AWS::CloudFormation::Stack'
+    Properties:
+      Parameters:
+        VpcPlainModule: !GetAtt 'VpcPlain.Outputs.StackName'
+        TrafficType: !If [HasFlowLogRejectOnly, REJECT, ALL]
+        RetentionInDays: !Ref FlowLogRetentionInDays
+      TemplateURL: './vpc-flow-logs.yaml'
+Outputs:
+  ModuleId:
+    Value: 'vpc'
+  ModuleVersion:
+    Value: '2.1.0'
+  StackName:
+    Value: !Ref 'AWS::StackName'
+  Id:
+    Value: !GetAtt 'VpcPlain.Outputs.Id'
+    Export:
+      Name: !Sub '${AWS::StackName}-Id'
+  CidrBlock:
+    Value: !Sub '10.${ClassB}.0.0/16'
+    Export:
+      Name: !Sub '${AWS::StackName}-CidrBlock'
+  NumberOfAvailabilityZones:
+    Value: !Ref NumberOfAvailabilityZones
+    Export:
+      Name: !Sub '${AWS::StackName}-NumberOfAvailabilityZones'
+  AvailabilityZones:
+    Value: !If
+    - HasAvailabilityZoneC
+    - !Sub '${SubnetAPublic.Outputs.AvailabilityZone},${SubnetBPublic.Outputs.AvailabilityZone},${SubnetCPublic.Outputs.AvailabilityZone}'
+    - !Sub '${SubnetAPublic.Outputs.AvailabilityZone},${SubnetBPublic.Outputs.AvailabilityZone}'
+    Export:
+      Name: !Sub '${AWS::StackName}-AvailabilityZones'
+  AvailabilityZoneA:
+    Value: !GetAtt 'SubnetAPublic.Outputs.AvailabilityZone'
+    Export:
+      Name: !Sub '${AWS::StackName}-AvailabilityZoneA'
+  AvailabilityZoneB:
+    Value: !GetAtt 'SubnetBPublic.Outputs.AvailabilityZone'
+    Export:
+      Name: !Sub '${AWS::StackName}-AvailabilityZoneB'
+  AvailabilityZoneC:
+    Condition: HasAvailabilityZoneC
+    Value: !GetAtt 'SubnetCPublic.Outputs.AvailabilityZone'
+    Export:
+      Name: !Sub '${AWS::StackName}-AvailabilityZoneC'
+  SubnetIdsPublic:
+    Value: !If
+    - HasAvailabilityZoneC
+    - !Sub '${SubnetAPublic.Outputs.Id},${SubnetBPublic.Outputs.Id},${SubnetCPublic.Outputs.Id}'
+    - !Sub '${SubnetAPublic.Outputs.Id},${SubnetBPublic.Outputs.Id}'
+    Export:
+      Name: !Sub '${AWS::StackName}-SubnetIdsPublic'
+  SubnetIdsPrivate:
+    Value: !If
+    - HasAvailabilityZoneC
+    - !Sub '${SubnetAPrivate.Outputs.Id},${SubnetBPrivate.Outputs.Id},${SubnetCPrivate.Outputs.Id}'
+    - !Sub '${SubnetAPrivate.Outputs.Id},${SubnetBPrivate.Outputs.Id}'
+    Export:
+      Name: !Sub '${AWS::StackName}-SubnetIdsPrivate'
+  RouteTableIdsPublic:
+    Value: !If
+    - HasAvailabilityZoneC
+    - !Sub '${SubnetAPublic.Outputs.RouteTableId},${SubnetBPublic.Outputs.RouteTableId},${SubnetCPublic.Outputs.RouteTableId}'
+    - !Sub '${SubnetAPublic.Outputs.RouteTableId},${SubnetBPublic.Outputs.RouteTableId}'
+    Export:
+      Name: !Sub '${AWS::StackName}-RouteTableIdsPublic'
+  RouteTableIdsPrivate:
+    Value: !If
+    - HasAvailabilityZoneC
+    - !Sub '${SubnetAPrivate.Outputs.RouteTableId},${SubnetBPrivate.Outputs.RouteTableId},${SubnetCPrivate.Outputs.RouteTableId}'
+    - !Sub '${SubnetAPrivate.Outputs.RouteTableId},${SubnetBPrivate.Outputs.RouteTableId}'
+    Export:
+      Name: !Sub '${AWS::StackName}-RouteTableIdsPrivate'
+  SubnetIdAPublic:
+    Value: !GetAtt 'SubnetAPublic.Outputs.Id'
+    Export:
+      Name: !Sub '${AWS::StackName}-SubnetIdAPublic'
+  RouteTableIdAPublic:
+    Value: !GetAtt 'SubnetAPublic.Outputs.RouteTableId'
+    Export:
+      Name: !Sub '${AWS::StackName}-RouteTableIdAPublic'
+  SubnetIdAPrivate:
+    Value: !GetAtt 'SubnetAPrivate.Outputs.Id'
+    Export:
+      Name: !Sub '${AWS::StackName}-SubnetIdAPrivate'
+  RouteTableIdAPrivate:
+    Value: !GetAtt 'SubnetAPrivate.Outputs.RouteTableId'
+    Export:
+      Name: !Sub '${AWS::StackName}-RouteTableIdAPrivate'
+  SubnetIdBPublic:
+    Value: !GetAtt 'SubnetBPublic.Outputs.Id'
+    Export:
+      Name: !Sub '${AWS::StackName}-SubnetIdBPublic'
+  RouteTableIdBPublic:
+    Value: !GetAtt 'SubnetBPublic.Outputs.RouteTableId'
+    Export:
+      Name: !Sub '${AWS::StackName}-RouteTableIdBPublic'
+  SubnetIdBPrivate:
+    Value: !GetAtt 'SubnetBPrivate.Outputs.Id'
+    Export:
+      Name: !Sub '${AWS::StackName}-SubnetIdBPrivate'
+  RouteTableIdBPrivate:
+    Value: !GetAtt 'SubnetBPrivate.Outputs.RouteTableId'
+    Export:
+      Name: !Sub '${AWS::StackName}-RouteTableIdBPrivate'
+  SubnetIdCPublic:
+    Condition: HasAvailabilityZoneC
+    Value: !GetAtt 'SubnetCPublic.Outputs.Id'
+    Export:
+      Name: !Sub '${AWS::StackName}-SubnetIdCPublic'
+  RouteTableIdCPublic:
+    Condition: HasAvailabilityZoneC
+    Value: !GetAtt 'SubnetCPublic.Outputs.RouteTableId'
+    Export:
+      Name: !Sub '${AWS::StackName}-RouteTableIdCPublic'
+  SubnetIdCPrivate:
+    Condition: HasAvailabilityZoneC
+    Value: !GetAtt 'SubnetCPrivate.Outputs.Id'
+    Export:
+      Name: !Sub '${AWS::StackName}-SubnetIdCPrivate'
+  RouteTableIdCPrivate:
+    Condition: HasAvailabilityZoneC
+    Value: !GetAtt 'SubnetCPrivate.Outputs.RouteTableId'
+    Export:
+      Name: !Sub '${AWS::StackName}-RouteTableIdCPrivate'
